@@ -7,7 +7,7 @@ services:
     container_name: property-analytics-api
 
     ports:
-      - "8002:8002"
+      - "8003:8002"
 
     env_file:
       - .env
