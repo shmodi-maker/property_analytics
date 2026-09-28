@@ -10,11 +10,15 @@ class PropertyRepository:
                 pe.listing_key_numeric,
                 pe.event_date,
                 pe.price,
-                pe.standard_status_at_event
+                pe.standard_status_at_event,
+                li.is_lease_listing,
+                li.list_price
             FROM public.zipdata_idxlistingpriceevent pe
+            LEFT JOIN public.zipdata_idxlisting li
+                ON li.listing_key_numeric = pe.listing_key_numeric
             WHERE pe.property_identity_id = %s
-              AND pe.standard_status_at_event = 'Active'
-              AND pe.price IS NOT NULL
+            AND pe.standard_status_at_event = 'Active'
+            AND pe.price IS NOT NULL
             ORDER BY
                 pe.event_date DESC,
                 pe.observed_at DESC
@@ -37,6 +41,12 @@ class PropertyRepository:
                     "event_date": row[2],
                     "price": float(row[3]),
                     "status": row[4],
+                    "is_lease_listing": bool(row[5]),
+                    "list_price": (
+                        float(row[6])
+                        if row[6] is not None
+                        else None
+                    ),
                 }
 
         finally:

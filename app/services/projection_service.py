@@ -55,7 +55,28 @@ class ProjectionService:
                 "projection_available": False,
                 "message": "No active listing found",
             }
-
+        if current_listing["is_lease_listing"]:
+            return {
+                "projection_available": False,
+                "property_identity_id": property_identity_id,
+                "property": {
+                    "address": property_identity["normalized_address"],
+                    "postal_code": property_identity["postal_code"],
+                    "city": property_identity["city"],
+                    "state": property_identity["state_or_province"],
+                },
+                "listing": {
+                    "type": "lease",
+                    "monthly_rent": current_listing["list_price"],
+                    "listing_key": current_listing["listing_key_numeric"],
+                    "event_date": current_listing["event_date"],
+                },
+                "message": (
+                    "Property is currently listed for lease. "
+                    "Property value projection is not available "
+                    "from the current lease listing."
+                ),
+            }
         current_price = current_listing["price"]
         postal_code = property_identity["postal_code"]
 
