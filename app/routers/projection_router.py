@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.repositories.property_repository import (
     PropertyRepository,
@@ -15,6 +15,8 @@ from app.repositories.zip_sales_repository import (
 from app.services.projection_service import (
     ProjectionService,
 )
+
+from app.cache import TTLCache
 
 
 # ==========================================================
@@ -36,6 +38,7 @@ sales_repository = SalesRepository()
 zip_sales_repository = ZipSalesRepository()
 
 projection_service = ProjectionService()
+projection_cache = TTLCache(ttl_seconds=600)
 
 
 # ==========================================================
@@ -127,14 +130,25 @@ def get_zip_sales(
 )
 def get_property_projection(
     property_identity_id: int,
+    response: Response,
 ):
+    cache_key = f"projection:property:{property_identity_id}"
 
-    return (
+    cached_result = projection_cache.get(cache_key)
+
+    if cached_result is not None:
+        response.headers["X-Cache"] = "HIT"
+        return cached_result
+    
+    result = (
         projection_service
         .get_projection(
             property_identity_id
         )
     )
+    projection_cache.set(cache_key, result)
+    response.headers["X-Cache"] = "MISS"
+    return result
 
 
 # ==========================================================
@@ -146,7 +160,16 @@ def get_property_projection(
 )
 def get_listing_projection(
     listing_key: str,
+    response: Response,
 ):
+
+    cache_key = f"projection:listing:{listing_key}"
+
+    # Check if the projection is already cached
+    cached_result = projection_cache.get(cache_key)
+    if cached_result is not None:
+        response.headers["X-Cache"] = "HIT"
+        return cached_result
 
     property_identity = (
         property_repository
@@ -156,14 +179,19 @@ def get_listing_projection(
     )
 
     if not property_identity:
+        response.headers["X-Cache"] = "MISS"
         return {
             "projection_available": False,
             "message": "Listing not found",
         }
 
-    return (
+    result = (
         projection_service
         .get_projection(
             property_identity["id"]
         )
     )
+    projection_cache.set(cache_key, result)
+
+    response.headers["X-Cache"] = "MISS"
+    return result
