@@ -13,7 +13,7 @@ class ComparableCalculator:
         living_area: Optional[float],
     ) -> Optional[float]:
 
-        if not price or not living_area or living_area <= 0:
+        if price is None or living_area is None or living_area <= 0:
             return None
 
         return float(price) / float(living_area)
@@ -26,6 +26,7 @@ class ComparableCalculator:
     ) -> float:
 
         scores = {}
+        weights = {}
 
         # ----------------------------------------------------
         # Distance
@@ -36,56 +37,57 @@ class ComparableCalculator:
         if distance is not None and radius_miles > 0:
             distance_score = max(
                 0.0,
-                1.0 - (distance / radius_miles)
+                1.0 - (float(distance) / float(radius_miles)),
             )
-        else:
-            distance_score = 0.0
 
-        scores["distance"] = distance_score
+            scores["distance"] = distance_score
+            weights["distance"] = COMPARABLE_WEIGHTS["distance"]
 
-        # ----------------------------------------------------
-        # Living area
-        # ----------------------------------------------------
 
         subject_area = subject.get("living_area")
         comp_area = comp.get("living_area")
 
-        if subject_area and comp_area:
+        if (
+            subject_area is not None
+            and comp_area is not None
+            and float(subject_area) > 0
+            and float(comp_area) > 0
+        ):
             area_difference = abs(
-                subject_area - comp_area
+                float(subject_area) - float(comp_area)
             )
 
             area_score = max(
                 0.0,
                 1.0 - (
                     area_difference
-                    / max(subject_area, comp_area)
-                )
+                    / max(float(subject_area), float(comp_area))
+                ),
             )
-        else:
-            area_score = 0.0
 
-        scores["living_area"] = area_score
-
-        # ----------------------------------------------------
-        # Bedrooms
-        # ----------------------------------------------------
+            scores["living_area"] = area_score
+            weights["living_area"] = COMPARABLE_WEIGHTS["living_area"]
 
         subject_beds = subject.get("bedrooms")
         comp_beds = comp.get("bedrooms")
 
-        if subject_beds is not None and comp_beds is not None:
+        if (
+            subject_beds is not None
+            and comp_beds is not None
+        ):
             bedroom_score = max(
                 0.0,
                 1.0 - (
-                    abs(subject_beds - comp_beds)
+                    abs(
+                        float(subject_beds)
+                        - float(comp_beds)
+                    )
                     / max(float(subject_beds), 1.0)
-                )
+                ),
             )
-        else:
-            bedroom_score = 0.0
 
-        scores["bedrooms"] = bedroom_score
+            scores["bedrooms"] = bedroom_score
+            weights["bedrooms"] = COMPARABLE_WEIGHTS["bedrooms"]
 
         # ----------------------------------------------------
         # Bathrooms
@@ -94,48 +96,67 @@ class ComparableCalculator:
         subject_baths = subject.get("bathrooms")
         comp_baths = comp.get("bathrooms")
 
-        if subject_baths is not None and comp_baths is not None:
+        if (
+            subject_baths is not None
+            and comp_baths is not None
+        ):
             bathroom_score = max(
                 0.0,
                 1.0 - (
-                    abs(subject_baths - comp_baths)
+                    abs(
+                        float(subject_baths)
+                        - float(comp_baths)
+                    )
                     / max(float(subject_baths), 1.0)
-                )
+                ),
             )
-        else:
-            bathroom_score = 0.0
 
-        scores["bathrooms"] = bathroom_score
+            scores["bathrooms"] = bathroom_score
+            weights["bathrooms"] = COMPARABLE_WEIGHTS["bathrooms"]
 
-        # ----------------------------------------------------
-        # Property class
-        # ----------------------------------------------------
+        subject_class = subject.get("property_class")
+        comp_class = comp.get("property_class")
 
         if (
-            subject.get("property_class")
-            and comp.get("property_class")
+            subject_class is not None
+            and comp_class is not None
         ):
             property_class_score = (
                 1.0
-                if subject["property_class"]
-                == comp["property_class"]
+                if subject_class == comp_class
                 else 0.0
             )
-        else:
-            property_class_score = 0.0
 
-        scores["property_class"] = property_class_score
+            scores["property_class"] = property_class_score
+            weights["property_class"] = COMPARABLE_WEIGHTS[
+                "property_class"
+            ]
 
         # ----------------------------------------------------
         # Weighted score
+        #
+        # Only use criteria where data exists.
+        # This prevents NULL values from causing errors and
+        # prevents missing data from automatically becoming 0.
         # ----------------------------------------------------
 
-        total_score = sum(
-            scores[key] * COMPARABLE_WEIGHTS[key]
-            for key in COMPARABLE_WEIGHTS
+        if not weights:
+            return 0.0
+
+        total_weight = sum(weights.values())
+
+        if total_weight <= 0:
+            return 0.0
+
+        weighted_score = sum(
+            scores[key] * weights[key]
+            for key in scores
         )
 
-        return round(total_score * 100, 2)
+        return round(
+            (weighted_score / total_weight) * 100,
+            2,
+        )
 
     @classmethod
     def prepare_comparable(
@@ -156,9 +177,9 @@ class ComparableCalculator:
 
         comp["comparability_score"] = (
             cls.similarity_score(
-                subject,
-                comp,
-                radius_miles,
+                subject=subject,
+                comp=comp,
+                radius_miles=radius_miles,
             )
         )
 
@@ -174,6 +195,7 @@ class ComparableCalculator:
             comp
             for comp in comparables
             if comp.get("price_per_sqft") is not None
+            and comp.get("comparability_score") is not None
         ]
 
         if not valid_comps:
@@ -185,19 +207,25 @@ class ComparableCalculator:
             }
 
         total_weight = sum(
-            max(comp["comparability_score"], 1.0)
+            max(
+                float(comp["comparability_score"]),
+                1.0,
+            )
             for comp in valid_comps
         )
 
         weighted_ppsf = sum(
-            comp["price_per_sqft"]
-            * max(comp["comparability_score"], 1.0)
+            float(comp["price_per_sqft"])
+            * max(
+                float(comp["comparability_score"]),
+                1.0,
+            )
             for comp in valid_comps
         ) / total_weight
 
         subject_area = subject.get("living_area")
 
-        if not subject_area:
+        if subject_area is None or float(subject_area) <= 0:
             return {
                 "estimated_low": None,
                 "estimated_mid": None,
@@ -208,33 +236,45 @@ class ComparableCalculator:
                 ),
             }
 
-        # Use the distribution of comparable $/sqft
-        # to create the initial valuation range.
+        # ----------------------------------------------------
+        # Price-per-square-foot distribution
+        # ----------------------------------------------------
 
         ppsf_values = sorted(
-            comp["price_per_sqft"]
+            float(comp["price_per_sqft"])
             for comp in valid_comps
         )
 
-        low_ppsf = ppsf_values[
-            max(0, int(len(ppsf_values) * 0.25))
-        ]
+        low_index = max(
+            0,
+            int(len(ppsf_values) * 0.25),
+        )
 
-        high_ppsf = ppsf_values[
-            min(
-                len(ppsf_values) - 1,
-                int(len(ppsf_values) * 0.75),
-            )
-        ]
+        high_index = min(
+            len(ppsf_values) - 1,
+            int(len(ppsf_values) * 0.75),
+        )
 
-        estimated_low = subject_area * low_ppsf
-        estimated_mid = subject_area * weighted_ppsf
-        estimated_high = subject_area * high_ppsf
+        low_ppsf = ppsf_values[low_index]
+        high_ppsf = ppsf_values[high_index]
+
+        estimated_low = float(subject_area) * low_ppsf
+        estimated_mid = float(subject_area) * weighted_ppsf
+        estimated_high = float(subject_area) * high_ppsf
 
         return {
-            "estimated_low": round(estimated_low, 2),
-            "estimated_mid": round(estimated_mid, 2),
-            "estimated_high": round(estimated_high, 2),
+            "estimated_low": round(
+                estimated_low,
+                2,
+            ),
+            "estimated_mid": round(
+                estimated_mid,
+                2,
+            ),
+            "estimated_high": round(
+                estimated_high,
+                2,
+            ),
             "weighted_price_per_sqft": round(
                 weighted_ppsf,
                 2,
@@ -247,7 +287,7 @@ class ComparableCalculator:
         valuation: dict,
     ) -> dict:
 
-        if not asking_price:
+        if asking_price is None:
             return {
                 "asking_price": None,
                 "position": None,
@@ -259,32 +299,53 @@ class ComparableCalculator:
         high = valuation.get("estimated_high")
         mid = valuation.get("estimated_mid")
 
+        # ----------------------------------------------------
+        # No valid valuation
+        # ----------------------------------------------------
+
         if low is None or high is None or mid is None:
-            position = None
-        elif asking_price < low:
+            return {
+                "asking_price": float(asking_price),
+                "position": None,
+                "difference_from_mid": None,
+                "difference_percent": None,
+            }
+
+        # ----------------------------------------------------
+        # Position
+        # ----------------------------------------------------
+
+        if asking_price < low:
             position = "below_range"
+
         elif asking_price > high:
             position = "above_range"
+
         else:
             position = "within_range"
 
-        difference = asking_price - mid
+        # ----------------------------------------------------
+        # Difference from midpoint
+        # ----------------------------------------------------
+
+        difference = float(asking_price) - float(mid)
 
         percentage = (
-            (difference / mid) * 100
-            if mid
+            (difference / float(mid)) * 100
+            if mid != 0
             else None
         )
 
         return {
-            "asking_price": asking_price,
+            "asking_price": float(asking_price),
             "position": position,
             "difference_from_mid": round(
                 difference,
                 2,
             ),
-            "difference_percent": round(
-                percentage,
-                2,
-            ) if percentage is not None else None,
+            "difference_percent": (
+                round(percentage, 2)
+                if percentage is not None
+                else None
+            ),
         }

@@ -1,6 +1,14 @@
-from app.repositories.property_repository import PropertyRepository
-from app.repositories.sales_repository import SalesRepository
-from app.repositories.zip_sales_repository import ZipSalesRepository
+from app.repositories.property_repository import (
+    PropertyRepository,
+)
+
+from app.repositories.sales_repository import (
+    SalesRepository,
+)
+
+from app.repositories.zip_sales_repository import (
+    ZipSalesRepository,
+)
 
 from app.calculations.growth_calculator import (
     calculate_repeat_sale_growth,
@@ -9,8 +17,9 @@ from app.calculations.growth_calculator import (
 
 from app.calculations.zip_growth_calculator import (
     calculate_zip_repeat_sale_growth,
-    calculate_zip_median_growth,
-    has_enough_zip_data,
+    calculate_growth_percentiles,
+    remove_growth_outliers,
+    MIN_ZIP_REPEAT_SALES,
 )
 
 from app.calculations.projection_calculator import (
@@ -19,210 +28,493 @@ from app.calculations.projection_calculator import (
 
 
 MIN_PROPERTY_REPEAT_SALES = 2
+PROPERTY_RANGE_SAMPLE_SIZE = 5
 
 
 class ProjectionService:
 
     def __init__(self):
-        self.property_repository = PropertyRepository()
-        self.sales_repository = SalesRepository()
-        self.zip_sales_repository = ZipSalesRepository()
+        self.property_repository = (
+            PropertyRepository()
+        )
 
-    def get_projection(self, property_identity_id: int):
+        self.sales_repository = (
+            SalesRepository()
+        )
+
+        self.zip_sales_repository = (
+            ZipSalesRepository()
+        )
+
+    def get_projection(
+        self,
+        property_identity_id: int,
+    ):
 
         # --------------------------------------------------
-        # 1. Get current property information
+        # 1. Property identity
         # --------------------------------------------------
 
         property_identity = (
             self.property_repository
-            .get_property_identity(property_identity_id)
+            .get_property_identity(
+                property_identity_id
+            )
         )
 
         if not property_identity:
+
             return {
                 "projection_available": False,
                 "message": "Property not found",
             }
 
+        # --------------------------------------------------
+        # 2. Current active listing
+        # --------------------------------------------------
+
         current_listing = (
             self.property_repository
-            .get_active_listing(property_identity_id)
+            .get_active_listing(
+                property_identity_id
+            )
         )
 
         if not current_listing:
+
             return {
                 "projection_available": False,
+                "property_identity_id": (
+                    property_identity_id
+                ),
                 "message": "No active listing found",
             }
-        if current_listing["is_lease_listing"]:
+
+        # --------------------------------------------------
+        # 3. Lease listing check
+        # --------------------------------------------------
+
+        if current_listing[
+            "is_lease_listing"
+        ]:
+
             return {
                 "projection_available": False,
-                "property_identity_id": property_identity_id,
+
+                "property_identity_id":
+                    property_identity_id,
+
                 "property": {
-                    "address": property_identity["normalized_address"],
-                    "postal_code": property_identity["postal_code"],
-                    "city": property_identity["city"],
-                    "state": property_identity["state_or_province"],
+                    "address":
+                        property_identity[
+                            "normalized_address"
+                        ],
+                    "postal_code":
+                        property_identity[
+                            "postal_code"
+                        ],
+                    "city":
+                        property_identity[
+                            "city"
+                        ],
+                    "state":
+                        property_identity[
+                            "state_or_province"
+                        ],
                 },
+
                 "listing": {
                     "type": "lease",
-                    "monthly_rent": current_listing["list_price"],
-                    "listing_key": current_listing["listing_key_numeric"],
-                    "event_date": current_listing["event_date"],
+                    "monthly_rent":
+                        current_listing[
+                            "list_price"
+                        ],
+                    "listing_key":
+                        current_listing[
+                            "listing_key_numeric"
+                        ],
+                    "event_date":
+                        current_listing[
+                            "event_date"
+                        ],
                 },
+
                 "message": (
-                    "Property is currently listed for lease. "
-                    "Property value projection is not available "
+                    "Property is currently listed "
+                    "for lease. Property value "
+                    "projection is not available "
                     "from the current lease listing."
                 ),
             }
-        current_price = current_listing["price"]
-        postal_code = property_identity["postal_code"]
 
         # --------------------------------------------------
-        # 2. Calculate property-specific growth
+        # 4. IMPORTANT:
+        # Use current LIST PRICE, not historical
+        # event price.
+        # --------------------------------------------------
+
+        current_price = (
+            current_listing["list_price"]
+        )
+
+        if current_price is None:
+
+            return {
+                "projection_available": False,
+                "property_identity_id":
+                    property_identity_id,
+                "message":
+                    "Current list price is unavailable",
+            }
+
+        postal_code = (
+            property_identity["postal_code"]
+        )
+
+        # --------------------------------------------------
+        # 5. Property-specific repeat sales
         # --------------------------------------------------
 
         property_sales = (
             self.sales_repository
-            .get_property_sales(property_identity_id)
+            .get_property_sales(
+                property_identity_id
+            )
         )
 
         property_repeat_sales = (
-            calculate_repeat_sale_growth(property_sales)
+            calculate_repeat_sale_growth(
+                property_sales
+            )
         )
 
-        usable_property_growth = [
-            item
-            for item in property_repeat_sales
-            if item["annual_growth_rate"] is not None
-        ]
-
-        annual_growth_rate = None
-        projection_method = None
-        zip_repeat_sales = []
-
-        if len(usable_property_growth) >= MIN_PROPERTY_REPEAT_SALES:
-
-            annual_growth_rate = calculate_median_growth(
+        property_repeat_sales = (
+            remove_growth_outliers(
                 property_repeat_sales
             )
+        )
 
-            projection_method = "property_repeat_sales"
+        property_stats = (
+            calculate_growth_percentiles(
+                property_repeat_sales
+            )
+        )
+
+        property_count = (
+            property_stats["count"]
+        )
 
         # --------------------------------------------------
-        # 3. ZIP-level fallback
+        # 6. ZIP-level repeat sales
         # --------------------------------------------------
 
-        if annual_growth_rate is None:
+        zip_sales = (
+            self.zip_sales_repository
+            .get_zip_sales(
+                postal_code
+            )
+        )
 
-            zip_sales = (
-                self.zip_sales_repository
-                .get_zip_sales(postal_code)
+        zip_repeat_sales = (
+            calculate_zip_repeat_sale_growth(
+                zip_sales
+            )
+        )
+
+        zip_repeat_sales = (
+            remove_growth_outliers(
+                zip_repeat_sales
+            )
+        )
+
+        zip_stats = (
+            calculate_growth_percentiles(
+                zip_repeat_sales
+            )
+        )
+
+        zip_count = zip_stats["count"]
+
+        # --------------------------------------------------
+        # 7. Determine growth model
+        # --------------------------------------------------
+
+        annual_growth_rate = None
+        low_growth_rate = None
+        high_growth_rate = None
+        projection_method = None
+        range_available = False
+
+        # ----------------------------------------------
+        # CASE A:
+        # 5+ property repeat-sale observations
+        # ----------------------------------------------
+
+        if property_count >= PROPERTY_RANGE_SAMPLE_SIZE:
+
+            annual_growth_rate = (
+                property_stats["median"]
             )
 
-            zip_repeat_sales = (
-                calculate_zip_repeat_sale_growth(zip_sales)
-            )
-            print("\nZIP REPEAT SALES")
-            print("----------------")
-
-            for item in zip_repeat_sales:
-                if item["annual_growth_rate"] is not None:
-                    print(
-                        f"Property: {item['property_identity_id']} | "
-                        f"{item['previous_sale_price']:,.0f} -> "
-                        f"{item['current_sale_price']:,.0f} | "
-                        f"{item['years_between']:.2f} years | "
-                        f"Growth: {item['annual_growth_percent']:.2f}%"
-                    )
-
-            zip_growth = calculate_zip_median_growth(zip_repeat_sales)
-
-            print("----------------")
-            print(
-                f"ZIP median growth: "
-                f"{zip_growth * 100:.2f}%"
-                if zip_growth is not None
-                else "ZIP median growth: None"
+            low_growth_rate = (
+                property_stats["p25"]
             )
 
-            if has_enough_zip_data(zip_repeat_sales):
+            high_growth_rate = (
+                property_stats["p75"]
+            )
 
-                annual_growth_rate = (
-                    calculate_zip_median_growth(
-                        zip_repeat_sales
-                    )
+            projection_method = (
+                "property_repeat_sales"
+            )
+
+            range_available = True
+
+        # ----------------------------------------------
+        # CASE B:
+        # 2-4 property observations
+        #
+        # Property median = mid
+        # ZIP P25/P75 = range
+        # ----------------------------------------------
+
+        elif property_count >= MIN_PROPERTY_REPEAT_SALES:
+
+            annual_growth_rate = (
+                property_stats["median"]
+            )
+
+            if zip_count >= MIN_ZIP_REPEAT_SALES:
+
+                low_growth_rate = (
+                    zip_stats["p25"]
                 )
 
-                projection_method = "zip_repeat_sales"
+                high_growth_rate = (
+                    zip_stats["p75"]
+                )
 
-        # --------------------------------------------------
-        # 4. No reliable projection available
-        # --------------------------------------------------
+                range_available = True
 
-        if annual_growth_rate is None:
+            else:
+
+                low_growth_rate = (
+                    annual_growth_rate
+                )
+
+                high_growth_rate = (
+                    annual_growth_rate
+                )
+
+            projection_method = (
+                "property_repeat_sales"
+            )
+
+        # ----------------------------------------------
+        # CASE C:
+        # Less than 2 property observations
+        #
+        # ZIP median = mid
+        # ZIP P25/P75 = range
+        # ----------------------------------------------
+
+        elif zip_count >= MIN_ZIP_REPEAT_SALES:
+
+            annual_growth_rate = (
+                zip_stats["median"]
+            )
+
+            low_growth_rate = (
+                zip_stats["p25"]
+            )
+
+            high_growth_rate = (
+                zip_stats["p75"]
+            )
+
+            projection_method = (
+                "zip_repeat_sales"
+            )
+
+            range_available = True
+
+        # ----------------------------------------------
+        # CASE D:
+        # No reliable model
+        # ----------------------------------------------
+
+        else:
 
             return {
                 "projection_available": False,
-                "property_identity_id": property_identity_id,
+
+                "property_identity_id":
+                    property_identity_id,
+
+                "property": {
+                    "address":
+                        property_identity[
+                            "normalized_address"
+                        ],
+                    "postal_code":
+                        postal_code,
+                    "city":
+                        property_identity[
+                            "city"
+                        ],
+                    "state":
+                        property_identity[
+                            "state_or_province"
+                        ],
+                },
+
+                "current": {
+                    "price": current_price,
+                    "listing_key":
+                        current_listing[
+                            "listing_key_numeric"
+                        ],
+                    "event_date":
+                        current_listing[
+                            "event_date"
+                        ],
+                },
+
+                "model": {
+                    "method": None,
+                    "range_available": False,
+
+                    "property_usable_repeat_sale_count":
+                        property_count,
+
+                    "zip_usable_repeat_sale_count":
+                        zip_count,
+                },
+
                 "message": (
-                    "Insufficient historical sales data "
-                    "for projection"
+                    "Insufficient historical sales "
+                    "data for projection"
                 ),
             }
 
         # --------------------------------------------------
-        # 5. Generate 5-year projection
+        # 8. Generate 5-year projection
         # --------------------------------------------------
 
-        projections = calculate_five_year_projection(
-            current_price=current_price,
-            annual_growth_rate=annual_growth_rate,
+        projections = (
+            calculate_five_year_projection(
+                current_price=current_price,
+                annual_growth_rate=
+                    annual_growth_rate,
+                low_growth_rate=
+                    low_growth_rate,
+                high_growth_rate=
+                    high_growth_rate,
+            )
         )
 
         # --------------------------------------------------
-        # 6. Return result
+        # 9. Return response
         # --------------------------------------------------
 
         return {
+
             "projection_available": True,
-            "property_identity_id": property_identity_id,
+
+            "property_identity_id":
+                property_identity_id,
+
             "property": {
-                "address": property_identity["normalized_address"],
-                "postal_code": postal_code,
-                "city": property_identity["city"],
-                "state": property_identity["state_or_province"],
+                "address":
+                    property_identity[
+                        "normalized_address"
+                    ],
+                "postal_code":
+                    postal_code,
+                "city":
+                    property_identity[
+                        "city"
+                    ],
+                "state":
+                    property_identity[
+                        "state_or_province"
+                    ],
             },
+
             "current": {
                 "price": current_price,
-                "listing_key": current_listing[
-                    "listing_key_numeric"
-                ],
-                "event_date": current_listing[
-                    "event_date"
-                ],
+                "listing_key":
+                    current_listing[
+                        "listing_key_numeric"
+                    ],
+                "event_date":
+                    current_listing[
+                        "event_date"
+                    ],
             },
+
             "model": {
-                "method": projection_method,
-                "annual_growth_rate": annual_growth_rate,
-                "annual_growth_percent": round(
-                    annual_growth_rate * 100,
-                    2,
-                ),
-                "property_usable_repeat_sale_count": len(
-                    usable_property_growth
-                ),
-                "zip_usable_repeat_sale_count": (
-                    sum(
-                        1
-                        for item in zip_repeat_sales
-                        if item["annual_growth_rate"] is not None
-                    )
-                    if projection_method == "zip_repeat_sales"
-                    else None
-                ),
+
+                "method":
+                    projection_method,
+
+                "annual_growth_rate":
+                    annual_growth_rate,
+
+                "annual_growth_percent":
+                    round(
+                        annual_growth_rate * 100,
+                        2,
+                    ),
+
+                "growth_rates": {
+
+                    "low":
+                        low_growth_rate,
+
+                    "mid":
+                        annual_growth_rate,
+
+                    "high":
+                        high_growth_rate,
+                },
+
+                "growth_percent": {
+
+                    "low":
+                        round(
+                            low_growth_rate * 100,
+                            2,
+                        ),
+
+                    "mid":
+                        round(
+                            annual_growth_rate * 100,
+                            2,
+                        ),
+
+                    "high":
+                        round(
+                            high_growth_rate * 100,
+                            2,
+                        ),
+                },
+
+                "percentiles": {
+                    "low": 25,
+                    "high": 75,
+                },
+
+                "range_available":
+                    range_available,
+
+                "property_usable_repeat_sale_count":
+                    property_count,
+
+                "zip_usable_repeat_sale_count":
+                    zip_count,
             },
-            "projections": projections,
+
+            "projections":
+                projections,
         }
