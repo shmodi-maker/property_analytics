@@ -2,7 +2,6 @@ from fastapi import FastAPI
 
 from app.database import get_connection
 from app.routers.projection_router import router as projection_router
-from app.routers.property_router import router as property_router
 from app.routers.comparable_router import router as comparable_router
 
 
@@ -13,7 +12,6 @@ app = FastAPI(
 
 
 app.include_router(projection_router)
-app.include_router(property_router)
 app.include_router(comparable_router)
 
 
