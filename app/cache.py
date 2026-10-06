@@ -1,5 +1,6 @@
 # 10 minutes TTL cache implementation
 # Applied caching to the get_listing_projection endpoint in projection_router.py: GET /api/v1/projection/listing/{listing_key}
+# Applied caching to the property_identity_id endpoint in projection_router.py: GET /api/v1/projection/{property_identity_id}
 
 import time
 from typing import Any

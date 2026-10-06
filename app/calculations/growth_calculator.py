@@ -48,8 +48,11 @@ def calculate_repeat_sale_growth(
     sales: list[dict],
 ) -> list[dict]:
     """
-    Calculate annual growth for consecutive sales
-    of the same property.
+    Calculate annual growth for all valid historical
+    repeat-sale pairs of the same property.
+
+    A pair is usable only when the two sales are at
+    least one year apart.
     """
 
     if not sales:
@@ -65,45 +68,50 @@ def calculate_repeat_sale_growth(
 
     repeat_sales = []
 
-    for previous, current in zip(
-        sales,
-        sales[1:],
-    ):
-        growth_rate = calculate_annual_growth(
-            previous_price=previous["price"],
-            current_price=current["price"],
-            previous_date=previous["event_date"].date(),
-            current_date=current["event_date"].date(),
-        )
+    # Compare every earlier sale with every later sale.
+    # calculate_annual_growth() will reject pairs
+    # that are less than one year apart.
+    for i, previous in enumerate(sales):
 
-        days_between = (
-            current["event_date"].date()
-            - previous["event_date"].date()
-        ).days
+        for current in sales[i + 1:]:
 
-        years_between = days_between / 365.25
+            previous_date = previous["event_date"].date()
+            current_date = current["event_date"].date()
 
-        repeat_sales.append(
-            {
-                "property_identity_id": current.get(
-                    "property_identity_id"
-                ),
-                "previous_sale_date": previous["event_date"],
-                "current_sale_date": current["event_date"],
-                "previous_sale_price": previous["price"],
-                "current_sale_price": current["price"],
-                "years_between": years_between,
-                "annual_growth_rate": growth_rate,
-                "annual_growth_percent": (
-                    growth_rate * 100
-                    if growth_rate is not None
-                    else None
-                ),
-                "used_for_projection": (
-                    growth_rate is not None
-                ),
-            }
-        )
+            growth_rate = calculate_annual_growth(
+                previous_price=previous["price"],
+                current_price=current["price"],
+                previous_date=previous_date,
+                current_date=current_date,
+            )
+
+            days_between = (
+                current_date - previous_date
+            ).days
+
+            years_between = days_between / 365.25
+
+            repeat_sales.append(
+                {
+                    "property_identity_id": current.get(
+                        "property_identity_id"
+                    ),
+                    "previous_sale_date": previous["event_date"],
+                    "current_sale_date": current["event_date"],
+                    "previous_sale_price": previous["price"],
+                    "current_sale_price": current["price"],
+                    "years_between": years_between,
+                    "annual_growth_rate": growth_rate,
+                    "annual_growth_percent": (
+                        growth_rate * 100
+                        if growth_rate is not None
+                        else None
+                    ),
+                    "used_for_projection": (
+                        growth_rate is not None
+                    ),
+                }
+            )
 
     return repeat_sales
 

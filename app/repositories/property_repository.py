@@ -335,19 +335,16 @@ class PropertyRepository:
         self,
         listing_key: str,
     ):
-
         query = """
             SELECT
-                pi.id,
-                pi.identity_key,
-                pi.normalized_address,
-                pi.postal_code,
-                pi.city,
-                pi.state_or_province
-            FROM public.zipdata_idxpropertyidentity pi
-            JOIN public.zipdata_idxlistingpriceevent pe
-                ON pe.property_identity_id = pi.id
-            WHERE pe.listing_key_numeric::text = %s
+                pe.property_identity_id,
+                pe.listing_key_numeric,
+                pe.event_date,
+                pe.observed_at
+            FROM public.zipdata_idxlistingpriceevent pe
+            WHERE pe.listing_key_numeric = %s
+            AND pe.standard_status_at_event = 'Active'
+            AND pe.price IS NOT NULL
             ORDER BY
                 pe.event_date DESC,
                 pe.observed_at DESC
@@ -358,7 +355,7 @@ class PropertyRepository:
 
         try:
             with conn.cursor() as cursor:
-                cursor.execute(query, (str(listing_key),))
+                cursor.execute(query, (listing_key,))
                 row = cursor.fetchone()
 
                 if not row:
@@ -366,11 +363,9 @@ class PropertyRepository:
 
                 return {
                     "id": row[0],
-                    "identity_key": row[1],
-                    "normalized_address": row[2],
-                    "postal_code": row[3],
-                    "city": row[4],
-                    "state_or_province": row[5],
+                    "listing_key_numeric": row[1],
+                    "event_date": row[2],
+                    "observed_at": row[3],
                 }
 
         finally:

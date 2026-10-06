@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Response, Depends
+from app.security import verify_projection_api_key
 
 from app.repositories.property_repository import (
     PropertyRepository,
@@ -26,6 +27,7 @@ from app.cache import TTLCache
 router = APIRouter(
     prefix="/api/v1/projection",
     tags=["Price Projection"],
+    dependencies=[Depends(verify_projection_api_key)]
 )
 
 
