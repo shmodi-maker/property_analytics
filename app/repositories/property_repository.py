@@ -343,30 +343,23 @@ class PropertyRepository:
                 pe.observed_at
             FROM public.zipdata_idxlistingpriceevent pe
             WHERE pe.listing_key_numeric = %s
-            AND pe.standard_status_at_event = 'Active'
-            AND pe.price IS NOT NULL
             ORDER BY
                 pe.event_date DESC,
                 pe.observed_at DESC
             LIMIT 1;
         """
 
-        conn = get_connection()
-
-        try:
+        with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(query, (listing_key,))
                 row = cursor.fetchone()
 
-                if not row:
-                    return None
+        if not row:
+            return None
 
-                return {
-                    "id": row[0],
-                    "listing_key_numeric": row[1],
-                    "event_date": row[2],
-                    "observed_at": row[3],
-                }
-
-        finally:
-            conn.close()
+        return {
+            "id": row[0],
+            "listing_key_numeric": row[1],
+            "event_date": row[2],
+            "observed_at": row[3],
+        }
