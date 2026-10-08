@@ -190,7 +190,8 @@ def get_listing_projection(
     result = (
         projection_service
         .get_projection(
-            property_identity["id"]
+            property_identity["id"],
+            listing_key=listing_key
         )
     )
     projection_cache.set(cache_key, result)

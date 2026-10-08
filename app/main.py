@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.database import get_connection
 from app.routers.projection_router import router as projection_router
 from app.routers.comparable_router import router as comparable_router
+from app.routers.listing_tour_router import router as listing_tour_router
 
 
 app = FastAPI(
@@ -13,6 +14,7 @@ app = FastAPI(
 
 app.include_router(projection_router)
 app.include_router(comparable_router)
+app.include_router(listing_tour_router)
 
 
 @app.get("/health")

@@ -1,3 +1,4 @@
+from datetime import date
 from app.repositories.property_repository import (
     PropertyRepository,
 )
@@ -49,6 +50,7 @@ class ProjectionService:
     def get_projection(
         self,
         property_identity_id: int,
+        listing_key: str | None = None,
     ):
 
         # --------------------------------------------------
@@ -73,21 +75,100 @@ class ProjectionService:
         # 2. Current active listing
         # --------------------------------------------------
 
-        current_listing = (
-            self.property_repository
-            .get_active_listing(
-                property_identity_id
+        if listing_key:
+            current_listing = (
+                self.property_repository
+                .get_listing_for_projection(listing_key)
             )
-        )
+        else:
+            # Preserve existing property-ID endpoint behavior.
+            current_listing = (
+                self.property_repository
+                .get_active_listing(
+                    property_identity_id
+                )
+            )
 
         if not current_listing:
+            return {
+                "projection_available": False,
+                "property_identity_id": property_identity_id,
+                "message": "Listing not found",
+            }
+
+        standard_status = current_listing.get(
+            "standard_status"
+        )
+
+        price_basis = None
+        current_price = None
+        projection_start_date = None
+
+        MARKET_STATUSES = {
+            "Active",
+            "Coming Soon",
+            "Active Under Contract",
+            "Pending",
+        }
+
+        if standard_status in MARKET_STATUSES:
+
+            current_price = current_listing.get(
+                "list_price"
+            )
+
+            projection_start_date = date.today()
+
+            price_basis = "list_price"
+
+        elif standard_status == "Closed":
+
+            current_price = current_listing.get(
+                "close_price"
+            )
+
+            projection_start_date = current_listing.get(
+                "close_date"
+            )
+
+            price_basis = "close_price"
+
+        elif standard_status in {
+            "Expired",
+            "Withdrawn",
+            "Canceled",
+        }:
 
             return {
                 "projection_available": False,
-                "property_identity_id": (
-                    property_identity_id
-                ),
-                "message": "No active listing found",
+                "property_identity_id": property_identity_id,
+
+                "current": {
+                    "listing_key": current_listing[
+                        "listing_key_numeric"
+                    ],
+                    "standard_status": standard_status,
+                    "price_basis": None,
+                },
+
+                "message": "listing not on market",
+            }
+
+        else:
+
+            return {
+                "projection_available": False,
+                "property_identity_id": property_identity_id,
+
+                "current": {
+                    "listing_key": current_listing[
+                        "listing_key_numeric"
+                    ],
+                    "standard_status": standard_status,
+                    "price_basis": None,
+                },
+
+                "message": "Unsupported listing status",
             }
 
         # --------------------------------------------------
@@ -133,10 +214,7 @@ class ProjectionService:
                         current_listing[
                             "listing_key_numeric"
                         ],
-                    "event_date":
-                        current_listing[
-                            "event_date"
-                        ],
+                    "event_date": projection_start_date,
                 },
 
                 "message": (
@@ -148,14 +226,8 @@ class ProjectionService:
             }
 
         # --------------------------------------------------
-        # 4. IMPORTANT:
-        # Use current LIST PRICE, not historical
-        # event price.
+        # 4. Validate projection starting price/date
         # --------------------------------------------------
-
-        current_price = (
-            current_listing["list_price"]
-        )
 
         if current_price is None:
 
@@ -164,7 +236,15 @@ class ProjectionService:
                 "property_identity_id":
                     property_identity_id,
                 "message":
-                    "Current list price is unavailable",
+                    "Projection starting price is unavailable",
+            }
+        if projection_start_date is None:
+            return {
+                "projection_available": False,
+                "property_identity_id": property_identity_id,
+                "message": (
+                    "Projection start date is unavailable"
+                ),
             }
 
         postal_code = (
@@ -443,14 +523,12 @@ class ProjectionService:
 
             "current": {
                 "price": current_price,
-                "listing_key":
-                    current_listing[
-                        "listing_key_numeric"
-                    ],
-                "event_date":
-                    current_listing[
-                        "event_date"
-                    ],
+                "listing_key": current_listing[
+                    "listing_key_numeric"
+                ],
+                "event_date": projection_start_date,
+                "standard_status": standard_status,
+                "price_basis": price_basis,
             },
 
             "model": {

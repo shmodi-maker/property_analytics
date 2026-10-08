@@ -363,3 +363,52 @@ class PropertyRepository:
             "event_date": row[2],
             "observed_at": row[3],
         }
+    # ----------------------------------------------------------
+    # Get listing details for price projection
+    # ----------------------------------------------------------
+
+    def get_listing_for_projection(self, listing_key: str):
+        query = """
+            SELECT
+                listing_key_numeric,
+                standard_status,
+                list_price,
+                close_date,
+                source_payload,
+                is_lease_listing
+            FROM public.zipdata_idxlisting
+            WHERE listing_key_numeric = %s
+            LIMIT 1;
+        """
+
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(query, (listing_key,))
+                row = cursor.fetchone()
+
+        if not row:
+            return None
+
+        source_payload = row[4] or {}
+
+        # ClosePrice is stored inside source_payload JSONB
+        close_price = source_payload.get("ClosePrice")
+
+        if close_price is not None:
+            try:
+                close_price = float(close_price)
+            except (TypeError, ValueError):
+                close_price = None
+
+        return {
+            "listing_key_numeric": row[0],
+            "standard_status": row[1],
+            "list_price": (
+                float(row[2])
+                if row[2] is not None
+                else None
+            ),
+            "close_date": row[3],
+            "close_price": close_price,
+            "is_lease_listing": bool(row[5]),
+        }

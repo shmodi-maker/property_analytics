@@ -5,6 +5,32 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+LISTING_TOUR_API_BASE_URL_1 = os.getenv(
+    "LISTING_TOUR_API_BASE_URL_1"
+)
+
+LISTING_TOUR_API_BASE_URL_2 = os.getenv(
+    "LISTING_TOUR_API_BASE_URL_2"
+)
+
+PROJECTION_API_KEY = os.getenv(
+    "PROJECTION_API_KEY"
+)
+
+JAINAM_API_TOKEN = os.getenv(
+    "JAINAM_API_TOKEN"
+)
+
+AWS_REGION = os.getenv(
+    "AWS_REGION",
+    "us-east-1"
+)
+
+BEDROCK_MODEL_ID = os.getenv(
+    "BEDROCK_MODEL_ID",
+    "amazon.nova-micro-v1:0"
+)
+
 COMPARABLE_RADIUS_MILES = float(
     os.getenv("COMPARABLE_RADIUS_MILES", "5")
 )
