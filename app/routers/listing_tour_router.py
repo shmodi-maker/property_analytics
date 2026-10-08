@@ -8,8 +8,9 @@ The router receives requests from the frontend and delegates the
 actual business logic to ListingTourService.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.security import check_listing_tour_rate_limit, verify_listing_tour_api_key
 from app.services.listing_tour.service import (
     ListingTourService,
 )
@@ -18,6 +19,10 @@ from app.services.listing_tour.service import (
 router = APIRouter(
     prefix="/api/v1/listing-tour",
     tags=["ListingTour"],
+    dependencies=[
+        Depends(verify_listing_tour_api_key),
+        Depends(check_listing_tour_rate_limit),
+    ],
 )
 
 
