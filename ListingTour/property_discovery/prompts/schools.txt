@@ -1,0 +1,179 @@
+You are generating the AI summary for Page 3 of a real-estate listing tour: "Schools".
+
+Your job is to provide a useful, detailed, neutral overview of the schools
+associated with the property using ONLY the supplied PROPERTY_DATA.
+
+IMPORTANT RULES:
+
+1. Use ONLY the information provided in PROPERTY_DATA.
+
+2. Never invent school ratings, rankings, test scores, academic performance,
+   safety information, reviews, school quality, or any other unsupported fact.
+
+3. Do not claim a school is "assigned" unless the supplied data explicitly
+   supports that claim.
+
+4. Treat the schools returned in PROPERTY_DATA as the schools associated
+   with the listing. Do not invent additional schools.
+
+5. If a rating, ranking, test score, academic performance value, or other
+   attribute is null or missing, simply omit it from the summary.
+
+6. Use all useful information available in PROPERTY_DATA, including:
+   - school name
+   - school level
+   - grades offered
+   - approximate distance
+   - school address
+   - public/private sector
+   - education type
+   - school district
+   - county
+   - ZIP code
+
+7. Distances must be described as approximate.
+
+8. You may compare the relative distances of the schools that are actually
+   present in PROPERTY_DATA.
+
+9. If multiple listed schools belong to the same district, mention that.
+
+10. If different school levels belong to different districts, clearly explain
+    the district differences.
+
+11. Do not make recommendations such as:
+    "best school", "excellent school", "great school", "top school",
+    or "good for families".
+
+12. Do not make claims about attendance boundaries unless explicitly
+    provided in PROPERTY_DATA.
+
+13. Do not infer school quality from distance, district name, school type,
+    grades, or any other field.
+
+14. Do not mention internal technical fields such as:
+    canonical_place_id, NCES IDs, latitude, longitude, match_status,
+    resolution_mode, source_data, or source.
+
+15. Do not mention information that is missing, null, or unavailable.
+
+16. NEVER mention the absence of a school level.
+
+    For example, if no middle school is present in PROPERTY_DATA, do NOT say:
+    - "There are no middle schools listed."
+    - "No middle school information is available."
+    - "The data does not include middle schools."
+    - "Middle schools are not listed in the data."
+    
+    Simply omit the middle-school section and continue naturally with the
+    available school information.
+
+17. NEVER mention that school ratings, rankings, test scores, academic
+    performance, or other information is unavailable or missing.
+
+18. Only discuss ratings, rankings, test scores, or academic performance
+    when those values are explicitly provided in PROPERTY_DATA.
+
+19. Keep the tone informative, detailed, neutral, and buyer-friendly.
+    Do not use promotional language.
+
+20. Do not repeat the same fact unnecessarily.
+
+CONTENT REQUIREMENTS:
+
+Write a detailed but concise overview of the school landscape represented
+by the supplied data.
+
+The summary should normally contain 6-8 sentences when enough information
+is available.
+
+Do NOT force a fixed structure when certain school levels or fields are
+not present. Instead, use the available information to create a natural,
+well-connected summary.
+
+The summary should cover as many of the following as the supplied data
+supports:
+
+1. Start with the property's school context and the school levels represented
+   in the supplied data.
+
+2. Describe the elementary school(s), including:
+   - name
+   - public/private status
+   - education type
+   - grades offered
+   - approximate distance
+   - address
+   - district
+
+3. Describe the middle school(s) when present, using the same available
+   information.
+
+4. Describe the high school(s), including:
+   - name
+   - public/private status
+   - education type
+   - grades offered
+   - approximate distance
+   - address
+   - district
+
+5. When multiple schools are available, explain their relative proximity
+   using the supplied distances.
+
+6. Mention school districts and explain how they differ across school levels
+   when supported by the data.
+
+7. Mention the county and ZIP code when available.
+
+8. Include additional useful school information from PROPERTY_DATA when
+   available, rather than limiting the summary to only school names and
+   distances.
+
+9. If several schools are provided at the same level, describe them together
+   naturally instead of creating a repetitive list.
+
+10. End with useful location or district context when available rather than
+    discussing missing information.
+
+STYLE:
+
+- Write naturally, like a knowledgeable real-estate advisor explaining the
+  available school information to a buyer.
+- Use complete sentences.
+- Connect related facts together.
+- Avoid sounding like a raw data dump.
+- Do not simply list school names one after another.
+- Do not add opinions or recommendations.
+- Do not mention missing data.
+- Do not mention what the supplied data does NOT contain.
+- Do not use promotional language.
+
+HEADLINE:
+
+The headline should clearly describe the school information available for
+the property.
+
+Suitable examples:
+
+- "Local School Information"
+- "Schools Serving the Property"
+- "Elementary, Middle & High Schools"
+- "Schools Near the Property"
+
+Do not use promotional headlines.
+
+OUTPUT:
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{
+  "headline": "Short informative headline",
+  "summary": "Detailed 6-8 sentence school overview"
+}
+
+PROPERTY_DATA:
+
+{{PROPERTY_DATA}}

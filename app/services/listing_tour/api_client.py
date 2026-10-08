@@ -8,7 +8,7 @@ It keeps external API communication separate from the business logic
 and applies authentication only to APIs that require it.
 """
 
-import httpx
+import httpx, asyncio
 
 from app.config import (
     LISTING_TOUR_API_BASE_URL_1,
@@ -170,3 +170,86 @@ class ListingTourAPIClient:
         response.raise_for_status()
 
         return response.json()
+
+    async def get_schools(self, listing_key: str) -> dict:
+        """
+        Fetch school information for the listing.
+
+        This method calls the existing ZIPAI schools endpoint and returns
+        the raw response so it can be normalized before sending it to Bedrock.
+        """
+        url = f"{self.base_url_2}/api/idx/v1/listings/{listing_key}/schools/"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+
+        response.raise_for_status()
+        return response.json()
+
+    # app/services/listing_tour/api_client.py
+
+    async def get_zip_insights(self, zipcode: str) -> dict:
+        """
+        Fetch ZIP-code insights such as crime and safety information.
+
+        This calls the existing ZIPAI ZIP Insights API and returns the
+        raw response so it can be normalized before being sent to Bedrock.
+        """
+        url = f"{self.base_url_2}/api/zipinsights/{zipcode}/"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+
+        response.raise_for_status()
+        return response.json()
+
+
+    async def get_housing_market_trends(self, zipcode: str) -> dict:
+        """
+        Fetch housing-market information for a ZIP code.
+
+        This calls the existing Housing Market Trends API and returns
+        the raw response so the ListingTour service can extract only the
+        fields needed for the Page 5 AI summary.
+        """
+        url = f"{self.base_url_2}/api/zipcode/{zipcode}/housing-market-trends/"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+
+        response.raise_for_status()
+        return response.json()
+
+    # async def get_home_details(self, listing_key: str) -> dict:
+    #     """
+    #     Fetch detailed property information for Page 4
+    #     "About This Home".
+
+    #     This combines the existing Facts API and Card API.
+    #     """
+    #     async with httpx.AsyncClient(timeout=30.0) as client:
+
+    #         facts_url = (
+    #             f"{self.base_url_2}"
+    #             f"/api/idx/v1/listings/{listing_key}/facts/"
+    #         )
+
+    #         card_url = (
+    #             f"{self.base_url_2}"
+    #             f"/api/idx/v1/listings/{listing_key}/card/"
+    #         )
+
+    #         facts_response, card_response = await asyncio.gather(
+    #             client.get(facts_url),
+    #             client.get(card_url),
+    #         )
+
+    #         facts_response.raise_for_status()
+    #         card_response.raise_for_status()
+
+    #         return {
+    #             "facts": facts_response.json(),
+    #             "card": card_response.json(),
+    #         }
+        
+    

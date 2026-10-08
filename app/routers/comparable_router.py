@@ -23,10 +23,10 @@ router = APIRouter(
 service = ComparableService()
 
 
-@router.get(
-    "/properties/{property_id}/comparables",
-    response_model=ComparableResponse,
-)
+# @router.get(
+#     "/properties/{property_id}/comparables",
+#     response_model=ComparableResponse,
+# )
 def get_comparable_properties(
     property_id: str,
 
