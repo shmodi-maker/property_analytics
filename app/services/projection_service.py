@@ -454,10 +454,9 @@ class ProjectionService:
                         current_listing[
                             "listing_key_numeric"
                         ],
-                    "event_date":
-                        current_listing[
-                            "event_date"
-                        ],
+                    "event_date": projection_start_date,
+                    "standard_status": standard_status,
+                    "price_basis": price_basis,
                 },
 
                 "model": {
