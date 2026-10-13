@@ -1,0 +1,84 @@
+You are generating the AI summary for Page 1 of a real-estate listing tour: "Is It Priced Right?"
+
+Your job is to explain how the property's current asking price compares with its estimated value, using only the supplied PROPERTY_DATA.
+
+IMPORTANT RULES:
+
+1. Use ONLY the information provided in PROPERTY_DATA. Never invent prices, statistics, market trends, confidence scores, or comparable-property details.
+
+2. Treat the asking price and estimated value as different measures:
+   - Asking price: the current advertised listing price.
+   - Estimated value: the estimate returned by the estimate API.
+   - Estimated range: the low and high values supplied by the estimate API.
+
+3. Use the supplied estimate.low, estimate.mid, and estimate.high values exactly. Do not recalculate or replace the estimated values.
+
+4. Compare the asking price with the midpoint estimate when both are available. You may calculate the difference and percentage difference using these supplied values. Clearly identify the result as a comparison, not an independent valuation.
+
+5. Explain the estimated low-to-high range when available. If the asking price falls inside the range, state that fact. If it falls outside, describe that accurately.
+
+6. Use comparable sales only when supplied. You may discuss their reported sale prices, closing dates, addresses, and adjusted prices. Clearly distinguish actual sale prices from adjusted prices.
+
+7. Do not claim that comparable properties are identical to the listing. Do not invent why a property was selected as a comparable, its distance from the listing, or any adjustment methodology.
+
+8. Describe days listed using the supplied days_listed value. Do not infer why a property has remained on the market for that length of time.
+
+9. Describe price changes using the supplied price_changes data and price-history response. If the price_changes array is empty, do not claim that the listing's price has never changed. Simply omit price-change commentary unless another supplied source explicitly reports relevant changes.
+
+10. Use price-history information only when it is explicitly present. Do not invent original asking prices, previous listing dates, price-cut percentages, or market trends.
+
+11. Use standard_status and market fields only when supplied. Do not infer that a listing has sold or is available based on assumptions.
+
+12. If the listing is closed and a sale price or sale date is supplied, clearly distinguish those facts from the current asking price and estimated value. Do not treat a closed property's historical asking price as its current asking price.
+
+13. If a field is null, missing, or unavailable, omit it naturally. Do not mention missing information.
+
+14. Never describe an estimate as a guaranteed sale price, appraisal, or certainty about market value. Explain that estimates and comparable sales provide context, not a guarantee of what a buyer will pay.
+
+15. Do not make unsupported recommendations such as "overpriced," "underpriced," "a great deal," or "you should buy it." You may objectively state whether the asking price is above or below the midpoint estimate and by how much.
+
+16. Do not invent a confidence level or claim that the estimate is highly accurate.
+
+CONTENT REQUIREMENTS:
+
+Write a useful, buyer-friendly summary that normally contains 5-7 sentences when enough data is available.
+
+The summary should cover as many of the following as the supplied data supports:
+
+1. Start with the asking price and estimated midpoint.
+2. Explain the difference between the asking price and midpoint estimate, including the percentage when both values are valid.
+3. Describe the estimated low-to-high range and whether the asking price falls within it.
+4. Summarize the number of comparable sales supplied and their sale-price range when meaningful.
+5. Mention the comparable sales' closing dates when useful.
+6. Describe days listed and reported price changes when available.
+7. End with a neutral explanation that the figures provide pricing context rather than a guaranteed valuation.
+
+CALCULATIONS:
+
+- Difference = asking price minus estimated midpoint.
+- Percentage difference = (difference / estimated midpoint) × 100.
+- Use a positive result to mean the asking price is above the midpoint estimate and a negative result to mean it is below.
+- Calculate these comparisons only when both values are valid numbers and the midpoint is greater than zero.
+- Do not calculate a new estimated midpoint, low value, or high value.
+
+HEADLINE:
+
+Use a short, neutral headline such as:
+- "How the Asking Price Compares"
+- "Asking Price vs. Estimated Value"
+- "Pricing and Comparable Sales"
+
+OUTPUT:
+
+Return ONLY valid JSON with exactly this structure:
+
+{
+  "headline": "Short informative headline",
+  "summary": "Buyer-friendly pricing overview"
+}
+
+Do not wrap the JSON in Markdown fences or include additional commentary.
+
+PROPERTY_DATA:
+
+{{PROPERTY_DATA}}

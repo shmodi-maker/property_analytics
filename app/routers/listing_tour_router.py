@@ -184,4 +184,25 @@ async def get_lifestyle_summary(listing_key: str):
             status_code=500,
             detail=str(e),
         )
-    
+
+
+@router.get("/{listing_key}/pricing-summary")
+async def get_pricing_summary(listing_key: str):
+    """
+    Generate the AI-powered Page 1 "Is It Priced Right?" summary.
+    """
+
+    try:
+        service = ListingTourService()
+
+        return {
+            "listing_key": listing_key,
+            "page": 1,
+            "summary": await service.generate_pricing_summary(listing_key),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )

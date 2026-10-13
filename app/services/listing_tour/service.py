@@ -30,52 +30,56 @@ class ListingTourService:
     # ----------------- DATA COLLECTION -----------------
 
     # Page 1 "Pricing"
-    async def get_pricing_data(
-        self,
-        listing_key: str,
-    ) -> dict:
+    
+    async def get_pricing_data(self, listing_key: str) -> dict:
         """
-        Collect pricing-related data for a listing.
+        Collect and normalize all data needed for the Page 1 pricing summary.
 
-        Card and price history are fetched concurrently because
-        they are independent API requests.
+        Card, price history, and estimate requests are independent and
+        are fetched concurrently.
         """
 
-        card, price_history = await asyncio.gather(
+        card, price_history, estimate_response = await asyncio.gather(
             self.api_client.get_card(listing_key),
             self.api_client.get_price_history(listing_key),
+            self.api_client.get_estimate(listing_key),
         )
 
-        return {
-            "listing_key": listing_key,
-            "card": card,
-            "price_history": price_history,
-        }
+        return normalize_pricing_data(
+            card=card,
+            price_history=price_history,
+            estimate_response=estimate_response,
+        )
+
 
     # Page 2 "Why Buy Now?"
-    async def get_buy_now_data(
-        self,
-        listing_key: str,
-    ) -> dict:
-        """
-        Collect all data required for the Page 2
-        "Why Buy Now?" summary.
+    async def get_buy_now_data(self, listing_key: str) -> dict:
+        """Fetch property data and identify which upstream API fails."""
 
-        Card, Facts, and Five-Year Projection are independent
-        API requests, so they are fetched concurrently.
-        """
+        tasks = {
+            "card": self.api_client.get_card,
+            "facts": self.api_client.get_facts,
+            "projection": self.api_client.get_projection,
+        }
 
-        card, facts, projection = await asyncio.gather(
-            self.api_client.get_card(listing_key),
-            self.api_client.get_facts(listing_key),
-            self.api_client.get_projection(listing_key),
-        )
+        results = {}
+
+        for name, api_method in tasks.items():
+            try:
+                results[name] = await api_method(listing_key)
+                print(f"[ListingTour] {name} API succeeded")
+            except Exception as exc:
+                print(
+                    f"[ListingTour] {name} API failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                raise
 
         return {
             "listing_key": listing_key,
-            "property": normalize_card(card),
-            "facts": normalize_facts(facts),
-            "projection": projection,
+            "property": normalize_card(results["card"]),
+            "facts": normalize_facts(results["facts"]),
+            "projection": results["projection"],
         }
 
     # Page 3 "Schools"
@@ -172,6 +176,36 @@ class ListingTourService:
         }
 
     # ----------------- SUMMARY GENERATION -----------------
+
+    # Page 1 "Pricing"
+    async def generate_pricing_summary(self, listing_key: str) -> dict:
+        """
+        Generate the Page 1 "Is It Priced Right?" summary using
+        normalized listing, estimate, comparable-sale, and price-history data.
+        """
+
+        data = await self.get_pricing_data(listing_key)
+
+        bedrock = BedrockService()
+        prompt_template = bedrock.load_prompt("pricing.txt")
+
+        prompt = prompt_template.replace(
+            "{{PROPERTY_DATA}}",
+            json.dumps(data, indent=2, default=str),
+        )
+
+        response = bedrock.generate_summary(prompt)
+
+        try:
+            result = json.loads(response)
+            if not isinstance(result, dict):
+                raise ValueError("Pricing summary must be a JSON object")
+            return result
+        except json.JSONDecodeError:
+            return {
+                "headline": "How the Asking Price Compares",
+                "summary": response,
+            }
 
     # Page 2 "Why Buy Now?"
     async def generate_buy_now_summary(

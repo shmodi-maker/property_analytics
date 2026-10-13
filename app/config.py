@@ -17,8 +17,9 @@ PROJECTION_API_KEY = os.getenv(
     "PROJECTION_API_KEY"
 )
 
-JAINAM_API_TOKEN = os.getenv(
-    "JAINAM_API_TOKEN"
+# API key used to authenticate ListingTour requests to the estimate API.
+LISTING_TOUR_API_KEY = os.getenv(
+    "LISTING_TOUR_API_KEY"
 )
 
 AWS_REGION = os.getenv(

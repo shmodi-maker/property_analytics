@@ -536,3 +536,56 @@ def normalize_lifestyle_data(
         "as_of": location_summary.get("meta", {}).get("as_of")
         or housing_market.get("as_of"),
     }
+
+
+def normalize_pricing_data(
+    card: dict[str, Any],
+    price_history: dict[str, Any],
+    estimate_response: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Normalize the Card, Price History, and Estimate API responses
+    for the Page 1 "Is It Priced Right?" summary.
+
+    The estimate response supplies estimated values, comparable sales,
+    days listed, price changes, and listing status.
+    """
+
+    estimate = estimate_response.get("estimate") or {}
+
+    # Keep only the comparable-sale fields returned by the API.
+    comparables = [
+        {
+            "address": item.get("address"),
+            "close_date": item.get("close_date"),
+            "sqft": item.get("sqft"),
+            "sale_price": item.get("sale_price"),
+            "adjusted_price": item.get("adjusted_price"),
+        }
+        for item in estimate_response.get("comparables", [])
+    ]
+
+    return {
+        "listing_key": (
+            estimate_response.get("listing_key_numeric")
+            or card.get("id")
+        ),
+        "listing_id": estimate_response.get("listing_id"),
+        "standard_status": estimate_response.get("standard_status"),
+        "market": estimate_response.get("market"),
+        "property": normalize_card(card),
+        "pricing": {
+            "asking_price": estimate_response.get("asking_price"),
+            "sale_price": estimate_response.get("sale_price"),
+            "sale_date": estimate_response.get("sale_date"),
+            "estimate": {
+                "low": estimate.get("low"),
+                "mid": estimate.get("mid"),
+                "high": estimate.get("high"),
+            },
+            "days_listed": estimate_response.get("days_listed"),
+            "price_changes": estimate_response.get("price_changes") or [],
+        },
+        "comparable_sales": comparables,
+        "price_history": normalize_price_history(price_history),
+    }

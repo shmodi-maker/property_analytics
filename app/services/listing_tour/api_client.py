@@ -13,7 +13,7 @@ import httpx, asyncio
 from app.config import (
     LISTING_TOUR_API_BASE_URL_1,
     LISTING_TOUR_API_BASE_URL_2,
-    JAINAM_API_TOKEN,
+    LISTING_TOUR_API_KEY,
     PROJECTION_API_KEY,
 )
 
@@ -72,20 +72,15 @@ class ListingTourAPIClient:
     # Jainam Estimate API - AUTH REQUIRED
     # ---------------------------------------------------------
 
-    async def get_estimate(
-        self,
-        listing_key: str,
-    ) -> dict:
+    async def get_estimate(self, listing_key: str) -> dict:
+        """Fetch property estimate using the ListingTour API key."""
 
-        if not JAINAM_API_TOKEN:
+        if not LISTING_TOUR_API_KEY:
             raise RuntimeError(
-                "JAINAM_API_TOKEN is not configured"
+                "LISTING_TOUR_API_KEY is not configured"
             )
 
-        url = (
-            f"{self.base_url_2}"
-            f"/api/client/my-home-estimate/"
-        )
+        url = f"{self.base_url_2}/api/client/my-home-estimate/"
 
         params = {
             "selection": f"idx:{listing_key}",
@@ -93,14 +88,11 @@ class ListingTourAPIClient:
         }
 
         headers = {
-            "Authorization": f"Bearer {JAINAM_API_TOKEN}",
+            "x-api-key": LISTING_TOUR_API_KEY,
             "Accept": "application/json",
         }
 
-        async with httpx.AsyncClient(
-            timeout=30.0
-        ) as client:
-
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 url,
                 params=params,
@@ -108,7 +100,6 @@ class ListingTourAPIClient:
             )
 
         response.raise_for_status()
-
         return response.json()
 
     # ---------------------------------------------------------
