@@ -11,15 +11,20 @@ provided to the Bedrock LLM for AI summary generation.
 from typing import Any
 
 
-def normalize_card(
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Extract the property information required by ListingTour
-    from the raw Card API response.
-    """
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Return value if it is a dictionary; otherwise return an empty dictionary."""
+    return value if isinstance(value, dict) else {}
 
-    events = data.get("events") or {}
+
+def _as_list(value: Any) -> list[Any]:
+    """Return value if it is a list; otherwise return an empty list."""
+    return value if isinstance(value, list) else []
+
+
+def normalize_card(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract the property information required from the raw Card API response."""
+    data = _as_dict(data)
+    events = _as_dict(data.get("events"))
 
     return {
         "listing_key": data.get("id"),
@@ -40,110 +45,62 @@ def normalize_card(
     }
 
 
-def normalize_price_history(
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Extract relevant price-history information from the raw
-    Price History API response.
-    """
-
+def normalize_price_history(data: dict[str, Any]) -> dict[str, Any]:
+    """Extract relevant price-history information from the raw API response."""
+    data = _as_dict(data)
+    listing_meta = _as_dict(data.get("listing_meta"))
+    fields_list = _as_list(listing_meta.get("fields"))
     fields = {
         item.get("key"): item.get("value")
-        for item in (
-            data.get("listing_meta", {}).get("fields", [])
-        )
+        for item in fields_list
+        if isinstance(item, dict) and item.get("key")
     }
 
     return {
         "displayable": data.get("display_mode") != "hidden",
-        "hidden_reason": data.get(
-            "section_hidden_reason"
-        ),
-        "events": data.get("events", []),
-        "events_total": data.get(
-            "events_total",
-            0,
-        ),
+        "hidden_reason": data.get("section_hidden_reason"),
+        "events": _as_list(data.get("events")),
+        "events_total": data.get("events_total", 0),
         "close_date": fields.get("CloseDate"),
         "close_price": fields.get("ClosePrice"),
-        "listing_contract_date": fields.get(
-            "ListingContractDate"
-        ),
+        "listing_contract_date": fields.get("ListingContractDate"),
         "listing_terms": fields.get("ListingTerms"),
-        "off_market_days": fields.get(
-            "OffMarketDays"
-        ),
-        "on_market_date": fields.get(
-            "OnMarketDate"
-        ),
-        "original_on_market_date": fields.get(
-            "OriginalOnMarketDate"
-        ),
+        "off_market_days": fields.get("OffMarketDays"),
+        "on_market_date": fields.get("OnMarketDate"),
+        "original_on_market_date": fields.get("OriginalOnMarketDate"),
     }
 
 
-def normalize_pricing_data(
-    card: dict[str, Any],
-    price_history: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Combine the normalized Card and Price History data into
-    the internal structure used by the Page 1 pricing summary.
+def normalize_facts(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the raw Facts API response into useful property attributes."""
+    data = _as_dict(data)
+    sections = _as_list(data.get("sections"))
+    fields: dict[str, Any] = {}
 
-    Estimate and comparable-sales data will be added once the
-    required authentication for that API is available.
-    """
-
-    return {
-        "property": normalize_card(card),
-        "price_history": normalize_price_history(
-            price_history
-        ),
-        "estimate": None,
-        "comparable_sales": [],
-    }
-
-def normalize_facts(
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Normalize the raw Facts API response.
-
-    The Facts API contains many property attributes organized
-    into sections. This function extracts the fields that are
-    useful for ListingTour summaries while preserving the
-    original unit information and public remarks.
-    """
-
-    # Flatten all section fields into a key-value dictionary.
-    fields = {}
-
-    for section in data.get("sections", []):
-        for field in section.get("fields", []):
+    # Flatten section fields while ignoring malformed section/field entries.
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        for field in _as_list(section.get("fields")):
+            if not isinstance(field, dict):
+                continue
             key = field.get("key")
-
             if key:
                 fields[key] = field.get("value")
 
     # Extract individual property units separately.
     units = []
-
-    for section in data.get("sections", []):
-        if section.get("id") != "property_units":
+    for section in sections:
+        if not isinstance(section, dict) or section.get("id") != "property_units":
             continue
+        for field in _as_list(section.get("fields")):
+            if isinstance(field, dict):
+                units.append({"unit": field.get("label"), "details": field.get("value")})
 
-        for field in section.get("fields", []):
-            units.append({
-                "unit": field.get("label"),
-                "details": field.get("value"),
-            })
+    fact_display = _as_dict(data.get("fact_display"))
+    remarks = _as_dict(data.get("remarks"))
+    display_policy = _as_dict(data.get("display_policy"))
 
-    # Values displayed separately by the API.
-    fact_display = data.get("fact_display", {})
-
-    # Normalize fireplace count because the API returns it as a string.
-    
     fireplace_count = fields.get("FireplacesTotal")
     try:
         fireplace_count_number = int(fireplace_count)
@@ -152,179 +109,82 @@ def normalize_facts(
 
     return {
         "listing_key": data.get("listing_key_numeric"),
-
-        # ---------------------------------------------------------
-        # Public MLS remarks
-        # ---------------------------------------------------------
-        "remarks": data.get("remarks", {}).get("public"),
-
-        # ---------------------------------------------------------
-        # Basic property information
-        # ---------------------------------------------------------
+        "remarks": remarks.get("public"),
         "property_type": fields.get("PropertyType"),
         "property_sub_type": fields.get("PropertySubType"),
         "stories": fields.get("Stories"),
         "new_construction": fields.get("NewConstructionYN"),
-
-        # ---------------------------------------------------------
-        # Size / lot information
-        # ---------------------------------------------------------
         "lot_size": fields.get("LotSizeSquareFeet"),
         "zoning": fields.get("Zoning"),
-
-        # ---------------------------------------------------------
-        # Beds / bathrooms
-        # ---------------------------------------------------------
         "bedrooms": fields.get("BedroomsTotal"),
         "full_bathrooms": fields.get("BathroomsFull"),
         "half_bathrooms": fields.get("BathroomsHalf"),
-
-        # ---------------------------------------------------------
-        # Kitchen
-        # ---------------------------------------------------------
         "kitchen": {
             "features": fields.get("RoomKitchenFeatures"),
             "appliances": fields.get("Appliances"),
         },
-
-        # ---------------------------------------------------------
-        # Bedroom features
-        # ---------------------------------------------------------
         "bedroom_features": fields.get("RoomBedroomFeatures"),
-
-        # ---------------------------------------------------------
-        # Living / dining areas
-        # ---------------------------------------------------------
         "dining": fields.get("RoomDiningFeatures"),
         "family_room": fields.get("RoomFamilyRoomFeatures"),
-
-        # ---------------------------------------------------------
-        # Laundry
-        # ---------------------------------------------------------
         "laundry": fields.get("LaundryFeatures"),
-
-        # ---------------------------------------------------------
-        # Fireplace
-        # ---------------------------------------------------------
         "fireplace": {
             "exists": fireplace_count_number > 0,
             "count": fireplace_count,
             "features": fields.get("FireplaceFeatures"),
         },
-
-        # ---------------------------------------------------------
-        # Interior / comfort features
-        # ---------------------------------------------------------
         "interior_features": fields.get("InteriorFeatures"),
         "flooring": fields.get("Flooring"),
         "heating": fields.get("Heating"),
         "cooling": fields.get("Cooling"),
-
-        # ---------------------------------------------------------
-        # Exterior
-        # ---------------------------------------------------------
         "exterior_features": fields.get("PatioAndPorchFeatures"),
-
-        # ---------------------------------------------------------
-        # Parking / garage
-        # ---------------------------------------------------------
         "parking_total": fields.get("ParkingTotal"),
         "parking_features": fields.get("ParkingFeatures"),
         "garage_spaces": fields.get("GarageSpaces"),
         "garage": fields.get("GarageYN"),
         "carport_spaces": fields.get("CarportSpaces"),
         "carport": fields.get("CarportYN"),
-
-        # ---------------------------------------------------------
-        # Construction
-        # ---------------------------------------------------------
         "foundation": fields.get("FoundationDetails"),
         "roof": fields.get("Roof"),
-
-        # ---------------------------------------------------------
-        # Utilities
-        # ---------------------------------------------------------
         "utilities": fields.get("Utilities"),
         "water_source": fields.get("WaterSource"),
         "sewer": fields.get("Sewer"),
         "gas": fields.get("Gas"),
-
-        # ---------------------------------------------------------
-        # Community / HOA
-        # ---------------------------------------------------------
         "hoa": fields.get("AssociationYN"),
         "hoa_fee": fields.get("AssociationFee"),
         "hoa_fee_frequency": fields.get("AssociationFeeFrequency"),
         "hoa_amenities": fields.get("AssociationAmenities"),
-
-        # ---------------------------------------------------------
-        # Community information
-        # ---------------------------------------------------------
         "lease_term": fields.get("LeaseTerm"),
         "total_units": fields.get("NumberOfUnitsTotal"),
         "leased_units": fields.get("NumberOfUnitsLeased"),
         "number_of_buildings": fields.get("NumberOfBuildings"),
-
-        # ---------------------------------------------------------
-        # Location
-        # ---------------------------------------------------------
-        "zipcode": (
-            fields.get("PostalCode")
-            or fields.get("PostalCodeFull")
-            or data.get("zipcode")
-            ),
+        "zipcode": fields.get("PostalCode") or fields.get("PostalCodeFull") or data.get("zipcode"),
         "walk_score": fields.get("WalkScore"),
-
-        # ---------------------------------------------------------
-        # Investment-related information
-        # ---------------------------------------------------------
         "cap_rate": fields.get("CapRate"),
-
-        # ---------------------------------------------------------
-        # Display information
-        # ---------------------------------------------------------
         "year_built": fact_display.get("YearBuilt"),
-        "price_per_sqft": fact_display.get(
-            "ComputedPricePerSqFt"
-        ),
-        "tax_annual_amount": fact_display.get(
-            "TaxAnnualAmount"
-        ),
+        "price_per_sqft": fact_display.get("ComputedPricePerSqFt"),
+        "tax_annual_amount": fact_display.get("TaxAnnualAmount"),
         "county": fact_display.get("CountyOrParish"),
-
-        # ---------------------------------------------------------
-        # Individual rental/property units
-        # ---------------------------------------------------------
         "units": units,
-
-        # ---------------------------------------------------------
-        # Display policy
-        # ---------------------------------------------------------
         "display_policy": {
-            "avm_display_allowed": data.get(
-                "display_policy", {}
-            ).get("avm_display_allowed"),
-
-            "consumer_comment_allowed": data.get(
-                "display_policy", {}
-            ).get("consumer_comment_allowed"),
+            "avm_display_allowed": display_policy.get("avm_display_allowed"),
+            "consumer_comment_allowed": display_policy.get("consumer_comment_allowed"),
         },
     }
 
-def normalize_schools(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Normalize the raw Schools API response.
 
-    This keeps only the school information needed by the ListingTour
-    AI summary and removes large nested NCES/source-data objects that
-    are not needed by Bedrock.
-    """
+def normalize_schools(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize school information and omit unnecessary source-data objects."""
+    data = _as_dict(data)
+    mls = _as_dict(data.get("mls"))
     normalized_tiers = []
 
-    for tier in data.get("tiers", []):
+    for tier in _as_list(data.get("tiers")):
+        if not isinstance(tier, dict):
+            continue
         schools = []
-
-        for school in tier.get("schools", []):
+        for school in _as_list(tier.get("schools")):
+            if not isinstance(school, dict):
+                continue
             schools.append({
                 "name": school.get("school_name") or school.get("name"),
                 "level": school.get("school_level"),
@@ -335,10 +195,9 @@ def normalize_schools(data: dict[str, Any]) -> dict[str, Any]:
                 "education_type": school.get("education_type"),
                 "grades_offered": school.get("grades_offered"),
                 "district_name": school.get("district_name"),
-                "county": data.get("mls", {}).get("county"),
+                "county": mls.get("county"),
                 "match_status": school.get("match_status"),
             })
-
         normalized_tiers.append({
             "level": tier.get("level"),
             "label": tier.get("label"),
@@ -351,35 +210,23 @@ def normalize_schools(data: dict[str, Any]) -> dict[str, Any]:
         "zipcode": data.get("zipcode"),
         "resolution_mode": data.get("mode"),
         "districts": {
-            "elementary": data.get("mls", {}).get("elementary_district"),
-            "high_school": data.get("mls", {}).get("high_school_district"),
+            "elementary": mls.get("elementary_district"),
+            "high_school": mls.get("high_school_district"),
         },
-        "county": data.get("mls", {}).get("county"),
+        "county": mls.get("county"),
         "tiers": normalized_tiers,
     }
 
-# Normalize home details has to be added here but check normalize facts() before adding it
-def normalize_home_card(
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Normalize the Card API response for the Page 4
-    "About This Home" summary.
 
-    This keeps the listing-level information needed by Bedrock
-    and removes the large image URL list.
-    """
-
-    # Collect unique photo categories.
+def normalize_home_card(data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the Card API response for the Page 4 home summary."""
+    data = _as_dict(data)
     photo_categories = []
 
-    for media in data.get("media", []):
-        category = (
-            media.get("image_of_display")
-            or media.get("label")
-            or media.get("image_of")
-        )
-
+    for media in _as_list(data.get("media")):
+        if not isinstance(media, dict):
+            continue
+        category = media.get("image_of_display") or media.get("label") or media.get("image_of")
         if category and category not in photo_categories:
             photo_categories.append(category)
 
@@ -397,52 +244,36 @@ def normalize_home_card(
         "standard_status": data.get("standard_status"),
         "property_type": data.get("property_type"),
         "property_class": data.get("property_class"),
-
-        # We only send the photo count and categories to Bedrock.
-        # The frontend handles the actual images.
         "media": {
             "photos_count": data.get("photos_count"),
             "categories": photo_categories,
         },
     }
 
-# app/services/listing_tour/normalizer.py
 
 def normalize_lifestyle_data(
     facts: dict[str, Any],
     zip_insights: dict[str, Any],
     housing_market: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Normalize all Page 5 ZIP-code and lifestyle information.
+    """Normalize ZIP-code, lifestyle, crime, and housing-market information."""
+    facts = _as_dict(facts)
+    zip_insights = _as_dict(zip_insights)
+    housing_market = _as_dict(housing_market)
 
-    The source APIs return a large amount of data, including long
-    historical series and property-sale records. This function keeps
-    only the fields required for the ListingTour AI summary.
+    crime = _as_dict(zip_insights.get("crime_rate"))
+    location_summary = _as_dict(housing_market.get("location_summary"))
+    zipcode_metrics = _as_dict(housing_market.get("zipcode_metrics"))
+    meta = _as_dict(location_summary.get("meta"))
+    chart = _as_dict(location_summary.get("chart"))
+    kpis = _as_list(location_summary.get("kpis"))
+    indices = _as_list(location_summary.get("indices"))
 
-    The normalized structure contains:
-    - ZIP code
-    - Walk Score
-    - lifestyle indices
-    - crime and safety information
-    - housing-market KPIs
-    - latest price-per-square-foot information
-    """
-
-    crime = zip_insights.get("crime_rate", {})
-
-    location_summary = housing_market.get("location_summary", {})
-    kpis = location_summary.get("kpis", [])
-    chart = location_summary.get("chart", {})
-    indices = location_summary.get("indices", [])
-    zipcode_metrics = housing_market.get("zipcode_metrics", {})
-
-    # Convert the KPI list into a simple dictionary.
-    market_kpis = {}
-
+    market_kpis: dict[str, Any] = {}
     for kpi in kpis:
+        if not isinstance(kpi, dict):
+            continue
         kpi_id = kpi.get("id")
-
         if kpi_id:
             market_kpis[kpi_id] = {
                 "title": kpi.get("title"),
@@ -451,12 +282,11 @@ def normalize_lifestyle_data(
                 "up": kpi.get("up"),
             }
 
-    # Convert the index list into a simple dictionary.
-    lifestyle_indices = {}
-
+    lifestyle_indices: dict[str, Any] = {}
     for index in indices:
+        if not isinstance(index, dict):
+            continue
         index_id = index.get("id")
-
         if index_id:
             lifestyle_indices[index_id] = {
                 "label": index.get("label"),
@@ -466,40 +296,28 @@ def normalize_lifestyle_data(
                 "is_estimated": index.get("is_estimated"),
             }
 
-    # Get the latest price-per-square-foot value from the chart.
     latest_price_per_sqft = None
-
-    labels = chart.get("labels", [])
-    values = chart.get("values", [])
-
+    labels = _as_list(chart.get("labels"))
+    values = _as_list(chart.get("values"))
     if labels and values and len(labels) == len(values):
-        latest_price_per_sqft = {
-            "period": labels[-1],
-            "value": values[-1],
-        }
+        latest_price_per_sqft = {"period": labels[-1], "value": values[-1]}
 
-    # Walk Score is supplied by the Facts API.
-    walk_score = None
+    walk_score = facts.get("walk_score")
+    if walk_score is None:
+        walk_score = _as_dict(facts.get("location")).get("walk_score")
 
-    # The exact location of Walk Score can vary in the Facts response,
-    # so first check the normalized facts structure.
-    if isinstance(facts, dict):
-        walk_score = facts.get("walk_score")
-
-        if walk_score is None:
-            location = facts.get("location")
-
-            if isinstance(location, dict):
-                walk_score = location.get("walk_score")
+    top_offenses = []
+    for offense in _as_list(crime.get("top_three_offenses")):
+        if isinstance(offense, dict):
+            top_offenses.append({
+                "type": offense.get("type"),
+                "share_pct": offense.get("share_pct"),
+            })
 
     return {
-        "zipcode": zip_insights.get("zipcode")
-        or housing_market.get("zipcode"),
-
+        "zipcode": zip_insights.get("zipcode") or housing_market.get("zipcode"),
         "walk_score": walk_score,
-
         "lifestyle_indices": lifestyle_indices,
-
         "crime": {
             "crime_index": crime.get("index"),
             "crime_level": crime.get("level"),
@@ -507,34 +325,18 @@ def normalize_lifestyle_data(
             "safety_index_10": crime.get("safety_index_10"),
             "three_year_change_pct": crime.get("three_year_change_pct"),
             "most_common_offense": crime.get("most_common_offense"),
-            "top_three_offenses": [
-                {
-                    "type": offense.get("type"),
-                    "share_pct": offense.get("share_pct"),
-                }
-                for offense in crime.get("top_three_offenses", [])
-            ],
+            "top_three_offenses": top_offenses,
         },
-
         "market": {
             "listed_houses": market_kpis.get("listed"),
             "pending_houses": market_kpis.get("pending"),
             "just_sold_30_days": market_kpis.get("sold30"),
             "average_days_on_market": market_kpis.get("dom"),
-
-            "median_estimated_market_value": zipcode_metrics.get(
-                "median_est_market_value"
-            ),
-
-            "median_price_per_sqft": zipcode_metrics.get(
-                "median_price_per_sqft"
-            ),
-
+            "median_estimated_market_value": zipcode_metrics.get("median_est_market_value"),
+            "median_price_per_sqft": zipcode_metrics.get("median_price_per_sqft"),
             "latest_average_price_per_sqft": latest_price_per_sqft,
         },
-
-        "as_of": location_summary.get("meta", {}).get("as_of")
-        or housing_market.get("as_of"),
+        "as_of": meta.get("as_of") or housing_market.get("as_of"),
     }
 
 
@@ -543,33 +345,26 @@ def normalize_pricing_data(
     price_history: dict[str, Any],
     estimate_response: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Normalize the Card, Price History, and Estimate API responses
-    for the Page 1 "Is It Priced Right?" summary.
+    """Normalize Card, Price History, and Estimate API responses for Page 1."""
+    card = _as_dict(card)
+    price_history = _as_dict(price_history)
+    estimate_response = _as_dict(estimate_response)
+    estimate = _as_dict(estimate_response.get("estimate"))
 
-    The estimate response supplies estimated values, comparable sales,
-    days listed, price changes, and listing status.
-    """
-
-    estimate = estimate_response.get("estimate") or {}
-
-    # Keep only the comparable-sale fields returned by the API.
-    comparables = [
-        {
+    comparables = []
+    for item in _as_list(estimate_response.get("comparables")):
+        if not isinstance(item, dict):
+            continue
+        comparables.append({
             "address": item.get("address"),
             "close_date": item.get("close_date"),
             "sqft": item.get("sqft"),
             "sale_price": item.get("sale_price"),
             "adjusted_price": item.get("adjusted_price"),
-        }
-        for item in estimate_response.get("comparables", [])
-    ]
+        })
 
     return {
-        "listing_key": (
-            estimate_response.get("listing_key_numeric")
-            or card.get("id")
-        ),
+        "listing_key": estimate_response.get("listing_key_numeric") or card.get("id"),
         "listing_id": estimate_response.get("listing_id"),
         "standard_status": estimate_response.get("standard_status"),
         "market": estimate_response.get("market"),
@@ -584,7 +379,7 @@ def normalize_pricing_data(
                 "high": estimate.get("high"),
             },
             "days_listed": estimate_response.get("days_listed"),
-            "price_changes": estimate_response.get("price_changes") or [],
+            "price_changes": _as_list(estimate_response.get("price_changes")),
         },
         "comparable_sales": comparables,
         "price_history": normalize_price_history(price_history),

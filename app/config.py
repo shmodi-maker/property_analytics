@@ -22,6 +22,10 @@ LISTING_TOUR_API_KEY = os.getenv(
     "LISTING_TOUR_API_KEY"
 )
 
+ESTIMATE_API_KEY = os.getenv(
+    "ESTIMATE_API_KEY"
+)
+
 AWS_REGION = os.getenv(
     "AWS_REGION",
     "us-east-1"

@@ -13,7 +13,7 @@ import httpx, asyncio
 from app.config import (
     LISTING_TOUR_API_BASE_URL_1,
     LISTING_TOUR_API_BASE_URL_2,
-    LISTING_TOUR_API_KEY,
+    ESTIMATE_API_KEY,
     PROJECTION_API_KEY,
 )
 
@@ -75,12 +75,15 @@ class ListingTourAPIClient:
     async def get_estimate(self, listing_key: str) -> dict:
         """Fetch property estimate using the ListingTour API key."""
 
-        if not LISTING_TOUR_API_KEY:
+        if not ESTIMATE_API_KEY:
             raise RuntimeError(
-                "LISTING_TOUR_API_KEY is not configured"
+                "ESTIMATE_API_KEY is not configured"
             )
 
-        url = f"{self.base_url_2}/api/client/my-home-estimate/"
+        url = (
+            f"{self.base_url_2}"
+            f"/api/idx/v1/internal/listings/{listing_key}/estimate/"
+        )
 
         params = {
             "selection": f"idx:{listing_key}",
@@ -88,10 +91,21 @@ class ListingTourAPIClient:
         }
 
         headers = {
-            "x-api-key": LISTING_TOUR_API_KEY,
+            # "x-api-key": LISTING_TOUR_API_KEY,
+            "X-Service-Token": ESTIMATE_API_KEY,
             "Accept": "application/json",
         }
 
+        # async with httpx.AsyncClient(timeout=30.0) as client:
+        #     response = await client.get(
+        #         url,
+        #         params=params,
+        #         headers=headers,
+        #     )
+
+        # response.raise_for_status()
+        # return response.json()
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 url,
@@ -99,8 +113,14 @@ class ListingTourAPIClient:
                 headers=headers,
             )
 
+        if response.is_error:
+            print("Estimate API status:", response.status_code)
+            print("Estimate API URL:", response.url)
+            print("Estimate API response:", response.text[:1000])
+
         response.raise_for_status()
         return response.json()
+
 
     # ---------------------------------------------------------
     # Our Projection API - API KEY REQUIRED
