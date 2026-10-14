@@ -74,14 +74,7 @@ class ListingTourService:
             cached_summary = None
 
         elapsed = time.perf_counter() - start
-        print(f"[CACHE] Database lookup took {elapsed:.3f}s", flush=True)
-
-        print(f"[CACHE] MISS/HIT CHECK: {listing_key}, page={page_number}", flush=True)
-        print(
-            f"[CACHE] RESULT: "
-            f"{'HIT' if cached_summary is not None else 'MISS'}",
-            flush=True,
-        )
+       
         if cached_summary is not None:
             logger.info(
                 "ListingTour cache HIT: listing=%s page=%s",
